@@ -46,6 +46,7 @@ SharpController::Result SharpController::tap(ControlId id, uint32_t nowMs) {
   if (id == ControlId::Count) return Result::Invalid;
   tapId_ = id;
   job_ = Job::Tap;
+  jobStartedMs_ = nowMs;
   lastSucceeded_ = false;
   write(id, true);
   enter(Phase::TapDown, nowMs);
@@ -55,6 +56,7 @@ SharpController::Result SharpController::tap(ControlId id, uint32_t nowMs) {
 SharpController::Result SharpController::reset(uint32_t nowMs) {
   if (busy()) return Result::Busy;
   job_ = Job::Reset;
+  jobStartedMs_ = nowMs;
   programAlarm_ = false;
   lastSucceeded_ = false;
   enter(Phase::ReleaseOutputs, nowMs);
@@ -77,6 +79,7 @@ SharpController::Result SharpController::synchronize(
   programAlarm_ = programAlarm;
   alarmEnabled_ = alarmEnabled;
   job_ = Job::Synchronize;
+  jobStartedMs_ = nowMs;
   lastSucceeded_ = false;
   enter(Phase::ReleaseOutputs, nowMs);
   return Result::Accepted;
@@ -99,6 +102,11 @@ void SharpController::cancel(const char* reason) {
 }
 
 void SharpController::update(uint32_t nowMs, int64_t epochMs) {
+  if (busy() &&
+      TimeUtils::elapsed(nowMs, jobStartedMs_, Config::SHARP_JOB_TIMEOUT_MS)) {
+    fail("Sharp operation timed out");
+    return;
+  }
   switch (phase_) {
     case Phase::Idle:
     case Phase::Failed:

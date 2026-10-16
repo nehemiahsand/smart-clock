@@ -4,7 +4,7 @@ This is the implementation source of truth for the ESP32 Sharp smart-clock conve
 
 ## Project status
 
-- Phase: implementation approved; Milestone 1 in progress
+- Phase: software implementation complete; hardware and live-network validation pending
 - Board/framework: DOIT ESP32 DEVKIT V1, Arduino, PlatformIO `esp32doit-devkit-v1`
 - Timezone: `America/Chicago`
 - Git strategy: scoped milestone commits
@@ -159,4 +159,9 @@ Software builds and host tests do not verify electrical behavior.
 
 ## Verification log
 
-Add dated build, native-test, static-check, and hardware-test results as milestones complete.
+- 2026-10-16: Preserved transferred prototype built successfully.
+- 2026-10-16: Milestone 1 added secrets hygiene, configuration, and native tests.
+- 2026-10-16: Native suite passed 13/13 tests covering wrap-safe timing, debounce, scheduling, timer pause/resume, missed-alarm grace, and DST policies.
+- 2026-10-16: Final ESP32 release build succeeded: 989,817 bytes flash (75.5%) and 49,752 bytes RAM (15.2%).
+- 2026-10-16: `git diff --check` passed.
+- Hardware behavior, MQTT TLS, HTTP, and OTA remain unverified on the actual devices.

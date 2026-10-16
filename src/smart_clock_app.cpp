@@ -323,6 +323,15 @@ void SmartClockApp::updateSchedule(uint32_t nowMs) {
   }
   sharpWasBusy_ = sharp_.busy();
 
+  tm local{};
+  localtime_r(&now, &local);
+  if (local.tm_hour == Config::DAILY_SYNC_HOUR &&
+      local.tm_min == Config::DAILY_SYNC_MINUTE &&
+      lastDailySyncYday_ != local.tm_yday) {
+    lastDailySyncYday_ = local.tm_yday;
+    needsProgramming_ = true;
+  }
+
   if (ringing_) {
     if (TimeUtils::elapsed(nowMs, ringStartedMs_, Config::RING_WINDOW_MS))
       finishRinging(false, now);
@@ -338,15 +347,6 @@ void SmartClockApp::updateSchedule(uint32_t nowMs) {
   }
   recomputeNext(now);
 
-  tm local{};
-  localtime_r(&now, &local);
-  if (local.tm_hour == Config::DAILY_SYNC_HOUR &&
-      local.tm_min == Config::DAILY_SYNC_MINUTE &&
-      lastDailySyncYday_ != local.tm_yday) {
-    lastDailySyncYday_ = local.tm_yday;
-    needsProgramming_ = true;
-  }
-
   if (needsProgramming_ && !sharp_.busy()) startProgramming(true);
 }
 
@@ -361,6 +361,7 @@ String SmartClockApp::buildStateJson() {
   doc["wifiConnected"] = time_.wifiConnected();
   doc["mqttConnected"] = network_.mqttConnected();
   doc["sharpBusy"] = sharp_.busy();
+  if (sharp_.lastError()[0]) doc["lastSharpError"] = sharp_.lastError();
   doc["ringing"] = ringing_;
   doc["ringingInferred"] = ringing_;
   if (next_.valid) {

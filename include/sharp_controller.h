@@ -36,6 +36,7 @@ class SharpController {
   Phase phase_ = Phase::Idle;
   ControlId tapId_ = ControlId::Time;
   uint32_t phaseAtMs_ = 0;
+  uint32_t jobStartedMs_ = 0;
   uint8_t timeHourRemaining_ = 0;
   uint8_t timeMinuteRemaining_ = 0;
   uint8_t alarmHourRemaining_ = 0;

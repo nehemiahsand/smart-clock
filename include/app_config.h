@@ -43,6 +43,7 @@ constexpr uint32_t MODE_START_MS = 600;
 constexpr uint32_t MODE_END_MS = 300;
 constexpr uint32_t RELAY_OFF_MS = 10000;
 constexpr uint32_t SHARP_BOOT_MS = 3000;
+constexpr uint32_t SHARP_JOB_TIMEOUT_MS = 180000;
 constexpr uint32_t STARTUP_INPUT_LOCKOUT_MS = 30000;
 constexpr uint32_t MANUAL_ALARM_SETTLE_MS = 60000;
 constexpr uint32_t WIFI_RETRY_MS = 10000;
