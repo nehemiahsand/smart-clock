@@ -2,6 +2,8 @@
 
 This is the implementation source of truth for the ESP32 Sharp smart-clock conversion. Update it whenever a requirement, assumption, milestone, test result, or integration contract changes.
 
+For the latest resumable state, read `docs/SESSION_HANDOFF.md` first.
+
 ## Project status
 
 - Phase: software implementation complete; hardware and live-network validation pending

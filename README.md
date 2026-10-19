@@ -2,7 +2,9 @@
 
 Firmware for a DOIT ESP32 DEVKIT V1 controlling a converted Sharp alarm clock. The Sharp electronics retain the display, timekeeping, buzzer, and one native alarm; the ESP32 adds accurate time, scheduling, timers, persistence, and smart-mirror integration.
 
-See [Project Tracker](docs/PROJECT_TRACKER.md), [PWA Handoff](docs/PWA_HANDOFF.md), and [Hardware Checklist](docs/HARDWARE_TEST_CHECKLIST.md).
+Start with [Session Handoff](docs/SESSION_HANDOFF.md), then see the
+[Project Tracker](docs/PROJECT_TRACKER.md), [PWA Handoff](docs/PWA_HANDOFF.md),
+and [Hardware Checklist](docs/HARDWARE_TEST_CHECKLIST.md).
 
 ## Safety
 
