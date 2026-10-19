@@ -46,6 +46,8 @@ All inputs are provisionally active-low with `INPUT_PULLUP`.
   programmed occurrence; it never directly mirrors the maintained switch.
 - HOUR cycles through AM/PM; use individual pulses, never auto-repeat.
 - Provisional timing: 250 ms press, 150 ms release, 10 s power-off, 3 s boot.
+- Routine alarm selection advances from the tracked native alarm with ALARM held and never interrupts power.
+- Successful power-cycle synchronization re-establishes the native alarm baseline at 12:00; a partial programming failure marks it unknown and requests recovery sync.
 - Hold TIME or ALARM while pulsing HOUR/MIN.
 - Set time one minute early, then pulse MIN at the target boundary; hidden-second reset requires confirmation.
 - Daily automatic synchronization is 12:00 PM local; defer it while an alarm is active.
@@ -54,9 +56,10 @@ All inputs are provisionally active-low with `INPUT_PULLUP`.
 
 - 10 smart alarm entries; recurring weekday or dated one-time.
 - PWA one-time alarms remain stored but disabled after firing.
-- Physical manual alarms are temporary one-time entries deleted after use.
+- There is one physical manual-alarm slot. A new settled edit replaces its temporary one-time entry, which is deleted after use.
 - Physical entries target the next occurrence: today if upcoming, otherwise tomorrow.
-- Manual edits settle for one minute, restarted after each related press.
+- A changed manual alarm auto-arms immediately on ALARM release; its temporary entry is committed after one minute, restarted by each additional edit.
+- Viewing the alarm without changing HOUR or MINUTE creates no entry.
 - Physical origin is reported to the backend.
 - Missed-alarm grace: 5 minutes.
 - Spring nonexistent times do not fire; fall repeated times fire once.
@@ -175,6 +178,14 @@ Software builds and host tests do not verify electrical behavior.
   transient dismissal, API v2, and standalone fallback implemented.
 - 2026-10-18: Native suite passed 16/16 tests; ESP32 release build succeeded
   at 993,229 bytes flash (75.8%) and 49,768 bytes RAM (15.2%).
+- 2026-10-18: Added non-power-cycling incremental alarm programming, tracked
+  native-alarm state, immediate physical-edit arming, and view-only ALARM handling.
+- 2026-10-18: Native suite passed 17/17 tests; ESP32 release build succeeded
+  at 995,473 bytes flash (75.9%) and 49,776 bytes RAM (15.2%).
+- 2026-10-18: Enforced one replaceable physical manual-alarm slot; boot cleanup
+  reduced three legacy test entries to the newest entry, ID 3.
+- 2026-10-18: Final USB flash succeeded; live API v2 state showed valid NTP
+  time, one physical alarm, gate/output enabled, and an idle Sharp controller.
 - 2026-10-18: USB flash verified on ESP32 MAC `d4:e9:f4:e5:e6:0c`;
   API v2 boot and 30-second `manual_fallback` transition observed over serial.
 - Hardware behavior, MQTT TLS, HTTP, and OTA remain unverified on the actual devices.

@@ -6,7 +6,7 @@
 class SharpController {
  public:
   enum class Result : uint8_t { Accepted, Busy, Invalid };
-  enum class Job : uint8_t { None, Tap, Reset, Synchronize };
+  enum class Job : uint8_t { None, Tap, Reset, Synchronize, ProgramAlarm };
   enum class Phase : uint8_t {
     Idle, TapDown, TapUp, ReleaseOutputs, PowerOff, Boot,
     HoldTime, TimeHourDown, TimeHourUp, TimeMinuteDown, TimeMinuteUp,
@@ -22,6 +22,9 @@ class SharpController {
   Result synchronize(uint8_t hour24, uint8_t minute, int64_t targetBoundaryMs,
                      bool programAlarm, uint8_t alarmHour24,
                      uint8_t alarmMinute, bool alarmEnabled, uint32_t nowMs);
+  Result programAlarm(uint8_t currentHour24, uint8_t currentMinute,
+                      uint8_t targetHour24, uint8_t targetMinute,
+                      bool alarmEnabled, uint32_t nowMs);
   void setManualOutput(ControlId id, bool active);
   void setNativeAlarmEnabled(bool enabled);
   void cancel(const char* reason);
@@ -30,10 +33,12 @@ class SharpController {
   Job job() const { return job_; }
   Phase phase() const { return phase_; }
   bool lastSucceeded() const { return lastSucceeded_; }
+  Job lastFinishedJob() const { return lastFinishedJob_; }
   const char* lastError() const { return lastError_; }
 
  private:
   Job job_ = Job::None;
+  Job lastFinishedJob_ = Job::None;
   Phase phase_ = Phase::Idle;
   ControlId tapId_ = ControlId::Time;
   uint32_t phaseAtMs_ = 0;

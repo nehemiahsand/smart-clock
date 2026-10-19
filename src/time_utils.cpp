@@ -11,6 +11,12 @@ int hourPressesFromMidnight(int hour24) {
 int minuteBeforeTarget(int minute) {
   return positiveModulo(minute - 1, 60);
 }
+int forwardHourPresses(int currentHour24, int targetHour24) {
+  return positiveModulo(targetHour24 - currentHour24, 24);
+}
+int forwardMinutePresses(int currentMinute, int targetMinute) {
+  return positiveModulo(targetMinute - currentMinute, 60);
+}
 uint32_t estimateButtonSequenceMs(int hourPresses, int minutePresses,
                                   uint32_t modeStartMs, uint32_t pressMs,
                                   uint32_t releaseMs, uint32_t modeEndMs) {

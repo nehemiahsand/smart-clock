@@ -11,6 +11,8 @@ inline bool reached(uint32_t now, uint32_t deadline) {
 int positiveModulo(int value, int modulus);
 int hourPressesFromMidnight(int hour24);
 int minuteBeforeTarget(int minute);
+int forwardHourPresses(int currentHour24, int targetHour24);
+int forwardMinutePresses(int currentMinute, int targetMinute);
 uint32_t estimateButtonSequenceMs(int hourPresses, int minutePresses,
                                   uint32_t modeStartMs, uint32_t pressMs,
                                   uint32_t releaseMs, uint32_t modeEndMs);

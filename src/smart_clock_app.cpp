@@ -23,6 +23,25 @@ Schedule::Alarm* freeAlarm(PersistedData& data) {
     if (!alarm.used) return &alarm;
   return nullptr;
 }
+Schedule::Alarm* physicalAlarm(PersistedData& data) {
+  Schedule::Alarm* newest = nullptr;
+  for (auto& alarm : data.alarms) {
+    if (!alarm.used || alarm.origin != Schedule::Origin::Physical) continue;
+    if (!newest || alarm.id > newest->id) newest = &alarm;
+  }
+  return newest;
+}
+bool removeDuplicatePhysicalAlarms(PersistedData& data) {
+  Schedule::Alarm* keep = physicalAlarm(data);
+  bool changed = false;
+  for (auto& alarm : data.alarms) {
+    if (!alarm.used || alarm.origin != Schedule::Origin::Physical ||
+        &alarm == keep) continue;
+    alarm = Schedule::Alarm{};
+    changed = true;
+  }
+  return changed;
+}
 Schedule::Timer* freeTimer(PersistedData& data) {
   for (auto& timer : data.timers)
     if (!timer.used) return &timer;
@@ -54,6 +73,14 @@ ControlId parseControl(const String& value) {
   if (name == "onoff" || name == "on/off") return ControlId::OnOff;
   return ControlId::Count;
 }
+
+bool sameOccurrence(const Schedule::Occurrence& left,
+                    const Schedule::Occurrence& right) {
+  if (left.valid != right.valid) return false;
+  if (!left.valid) return true;
+  return left.timer == right.timer && left.id == right.id &&
+         left.epoch == right.epoch;
+}
 }
 
 String SmartClockApp::stateThunk() {
@@ -77,6 +104,13 @@ void SmartClockApp::begin() {
   if (!store_.begin()) Serial.printf("[error] %s\n", store_.lastError());
   if (!store_.load(data_))
     Serial.printf("[warn] settings reset: %s\n", store_.lastError());
+  if (removeDuplicatePhysicalAlarms(data_)) {
+    if (!store_.save(data_))
+      Serial.printf("[error] physical alarm cleanup failed: %s\n",
+                    store_.lastError());
+    else
+      Serial.println("[info] removed duplicate physical alarm entries");
+  }
   if (!hasEnabledEntries()) data_.sharpAlarmGateEnabled = false;
 
   time_.begin(bootMs_);
@@ -95,13 +129,22 @@ bool SmartClockApp::hasEnabledEntries() const {
       data_.alarms, Config::MAX_ALARMS, data_.timers, Config::MAX_TIMERS);
 }
 
+bool SmartClockApp::hasGateEligibleEntry() const {
+  return hasEnabledEntries() || manualEditPending_;
+}
+
+bool SmartClockApp::nativeAlarmMatches(uint8_t hour, uint8_t minute) const {
+  return nativeAlarmKnown_ && nativeAlarmHour_ == hour &&
+         nativeAlarmMinute_ == minute;
+}
+
 void SmartClockApp::setSharpOutput(bool enabled) {
   sharpOutputEnabled_ = enabled;
   sharp_.setNativeAlarmEnabled(enabled);
 }
 
 void SmartClockApp::clearGateWithoutEntries() {
-  if (hasEnabledEntries()) return;
+  if (hasGateEligibleEntry()) return;
   data_.sharpAlarmGateEnabled = false;
   if (!manualFallback_) setSharpOutput(false);
 }
@@ -120,13 +163,19 @@ void SmartClockApp::exitManualFallback() {
   manualFallback_ = false;
   fallbackSharpEnabled_ = false;
   setSharpOutput(false);
-  needsProgramming_ = true;
+  needsClockSync_ = true;
   Serial.println("[info] leaving manual fallback; synchronization required");
   network_.publishEvent("clock.smart_mode");
 }
 
 void SmartClockApp::setMaster(bool enabled, time_t now, const char* source) {
   if (masterEnabled_ == enabled) return;
+  Schedule::Occurrence previous{};
+  if (now > 0) {
+    previous = Schedule::nextOccurrence(
+        data_.alarms, Config::MAX_ALARMS, data_.timers,
+        Config::MAX_TIMERS, masterEnabled_, now);
+  }
   if (now > 0 && !enabled) {
     Schedule::suspendTimers(data_.timers, Config::MAX_TIMERS, now);
     for (auto& alarm : data_.alarms)
@@ -140,25 +189,52 @@ void SmartClockApp::setMaster(bool enabled, time_t now, const char* source) {
         alarm.state = Schedule::EntryState::Scheduled;
   }
   masterEnabled_ = enabled;
-  if (sharp_.busy()) sharp_.cancel("master changed during Sharp operation");
-  if (!manualFallback_) setSharpOutput(false);
-  needsProgramming_ = true;
+  if (!manualFallback_ && now > 0) {
+    recomputeNext(now);
+    if (!sameOccurrence(previous, next_)) {
+      if (sharp_.busy())
+        sharp_.cancel("eligible occurrence changed with smart master");
+      setSharpOutput(false);
+      needsAlarmProgramming_ = next_.valid;
+    }
+  }
   Serial.printf("[info] smart master %s by %s\n", enabled ? "on" : "off", source);
   markDirty();
 }
 
 bool SmartClockApp::setSharpAlarmGate(
     bool enabled, time_t now, const char* source) {
-  if (enabled && !hasEnabledEntries()) return false;
+  Schedule::Occurrence eligible{};
+  if (now > 0) {
+    eligible = Schedule::nextOccurrence(
+        data_.alarms, Config::MAX_ALARMS, data_.timers,
+        Config::MAX_TIMERS, masterEnabled_, now);
+  }
+  if (enabled && !manualEditPending_ && !eligible.valid) return false;
   if (data_.sharpAlarmGateEnabled == enabled) return true;
 
   data_.sharpAlarmGateEnabled = enabled;
-  setSharpOutput(false);
-  if (!enabled && ringing_) {
-    completeRinging(now, Schedule::Completion::Fired);
-    network_.publishEvent("alarm.dismiss");
+  if (!enabled) {
+    setSharpOutput(false);
+    if (ringing_) {
+      completeRinging(now, Schedule::Completion::Fired);
+      needsAlarmProgramming_ = true;
+      network_.publishEvent("alarm.dismiss");
+    }
+  } else if (manualEditPending_ && nativeAlarmKnown_) {
+    setSharpOutput(true);
+  } else if (eligible.valid) {
+    next_ = eligible;
+    tm alarmLocal{};
+    localtime_r(&next_.epoch, &alarmLocal);
+    if (nativeAlarmMatches(alarmLocal.tm_hour, alarmLocal.tm_min)) {
+      setSharpOutput(true);
+    } else {
+      setSharpOutput(false);
+      needsAlarmProgramming_ = true;
+    }
   }
-  needsProgramming_ = true;
+
   Serial.printf("[info] Sharp alarm gate %s by %s\n",
                 enabled ? "on" : "off", source);
   String payload = String("{\"enabled\":") + (enabled ? "true" : "false") +
@@ -200,6 +276,13 @@ void SmartClockApp::handleInput(const InputEvent& event, uint32_t nowMs) {
     return;
   }
 
+  if (!manualFallback_ && event.control == ControlId::Alarm &&
+      event.type == InputEventType::Pressed && !nativeAlarmKnown_) {
+    needsClockSync_ = true;
+    Serial.println("[warn] manual alarm edit deferred: native alarm unknown");
+    return;
+  }
+
   const bool routeToSharp = manualFallback_ ||
       event.control == ControlId::Alarm ||
       (manualEditActive_ &&
@@ -215,24 +298,49 @@ void SmartClockApp::handleInput(const InputEvent& event, uint32_t nowMs) {
   if (event.control == ControlId::Alarm) {
     if (event.type == InputEventType::Pressed) {
       manualEditActive_ = true;
-      manualEditPending_ = false;
-      if (next_.valid) {
-        tm local{};
-        localtime_r(&next_.epoch, &local);
-        manualHour_ = local.tm_hour;
-        manualMinute_ = local.tm_min;
+      manualEditChanged_ = false;
+      manualOutputBeforeEdit_ = sharpOutputEnabled_;
+      if (nativeAlarmKnown_) {
+        manualHour_ = nativeAlarmHour_;
+        manualMinute_ = nativeAlarmMinute_;
+      } else {
+        manualHour_ = 0;
+        manualMinute_ = 0;
       }
+      if (!manualFallback_) setSharpOutput(false);
     } else if (event.type == InputEventType::Released && manualEditActive_) {
       manualEditActive_ = false;
+      if (!manualEditChanged_) {
+        if (!manualFallback_) setSharpOutput(manualOutputBeforeEdit_);
+        return;
+      }
+
+      nativeAlarmKnown_ = true;
+      nativeAlarmHour_ = manualHour_;
+      nativeAlarmMinute_ = manualMinute_;
       manualEditPending_ = true;
       manualLastEditMs_ = nowMs;
+      needsAlarmProgramming_ = false;
+      const bool gateChanged = !data_.sharpAlarmGateEnabled;
+      data_.sharpAlarmGateEnabled = true;
+      if (!manualFallback_) setSharpOutput(true);
+      if (gateChanged) {
+        network_.publishEvent(
+            "sharp_alarm.gate_changed",
+            "{\"enabled\":true,\"source\":\"physical-manual\"}");
+      }
+      markDirty();
+      Serial.printf("[info] physical alarm pending %02u:%02u\n",
+                    manualHour_, manualMinute_);
     }
   } else if (manualEditActive_ && event.type == InputEventType::Clicked) {
-    if (event.control == ControlId::Hour)
+    if (event.control == ControlId::Hour) {
       manualHour_ = static_cast<uint8_t>((manualHour_ + 1) % 24);
-    else if (event.control == ControlId::Minute)
+      manualEditChanged_ = true;
+    } else if (event.control == ControlId::Minute) {
       manualMinute_ = static_cast<uint8_t>((manualMinute_ + 1) % 60);
-    manualLastEditMs_ = nowMs;
+      manualEditChanged_ = true;
+    }
   }
 }
 
@@ -243,19 +351,36 @@ void SmartClockApp::handleInputs(uint32_t nowMs) {
 }
 
 bool SmartClockApp::addPhysicalAlarm(time_t now) {
-  Schedule::Alarm* alarm = freeAlarm(data_);
+  removeDuplicatePhysicalAlarms(data_);
+  Schedule::Alarm* alarm = physicalAlarm(data_);
+  if (!alarm) alarm = freeAlarm(data_);
   if (!alarm) return false;
+  const uint32_t id = alarm->used ? alarm->id : data_.nextId++;
   *alarm = Schedule::Alarm{};
-  alarm->id = data_.nextId++;
+  alarm->id = id;
   alarm->used = alarm->enabled = alarm->temporary = true;
   alarm->origin = Schedule::Origin::Physical;
   alarm->state = Schedule::EntryState::Scheduled;
   alarm->hour = manualHour_;
   alarm->minute = manualMinute_;
   alarm->oneTimeEpoch = nextLocalOccurrence(now, manualHour_, manualMinute_);
-  data_.sharpAlarmGateEnabled = true;
+
+  recomputeNext(now);
+  if (next_.valid) {
+    tm selected{};
+    localtime_r(&next_.epoch, &selected);
+    if (nativeAlarmMatches(selected.tm_hour, selected.tm_min)) {
+      setSharpOutput(data_.sharpAlarmGateEnabled);
+      needsAlarmProgramming_ = false;
+    } else {
+      setSharpOutput(false);
+      needsAlarmProgramming_ = true;
+    }
+  } else {
+    setSharpOutput(false);
+    needsAlarmProgramming_ = false;
+  }
   markDirty();
-  needsProgramming_ = true;
   return true;
 }
 
@@ -270,8 +395,10 @@ void SmartClockApp::updateManualImport(uint32_t nowMs) {
   if (addPhysicalAlarm(time_.now()))
     Serial.printf("[info] imported physical alarm %02u:%02u\n",
                   manualHour_, manualMinute_);
-  else
+  else {
     Serial.println("[error] alarm capacity full; physical alarm not imported");
+    needsAlarmProgramming_ = true;
+  }
 }
 
 void SmartClockApp::recomputeNext(time_t now) {
@@ -280,9 +407,49 @@ void SmartClockApp::recomputeNext(time_t now) {
       Config::MAX_TIMERS, masterEnabled_, now);
 }
 
-bool SmartClockApp::startProgramming(bool) {
+bool SmartClockApp::startProgramming(bool forceTimeSync) {
   if (!time_.valid() || sharp_.busy()) return false;
   recomputeNext(time_.now());
+
+  uint8_t alarmHour = 0;
+  uint8_t alarmMinute = 0;
+  if (next_.valid) {
+    tm alarmLocal{};
+    localtime_r(&next_.epoch, &alarmLocal);
+    alarmHour = static_cast<uint8_t>(alarmLocal.tm_hour);
+    alarmMinute = static_cast<uint8_t>(alarmLocal.tm_min);
+  }
+  const bool alarmOn = next_.valid && data_.sharpAlarmGateEnabled;
+
+  if (!forceTimeSync) {
+    if (!next_.valid) {
+      setSharpOutput(false);
+      needsAlarmProgramming_ = false;
+      return true;
+    }
+    if (!nativeAlarmKnown_) {
+      needsAlarmProgramming_ = false;
+      needsClockSync_ = true;
+      return false;
+    }
+    if (nativeAlarmMatches(alarmHour, alarmMinute)) {
+      setSharpOutput(alarmOn);
+      needsAlarmProgramming_ = false;
+      return true;
+    }
+
+    setSharpOutput(false);
+    const auto accepted = sharp_.programAlarm(
+        nativeAlarmHour_, nativeAlarmMinute_, alarmHour, alarmMinute,
+        alarmOn, millis());
+    if (accepted == SharpController::Result::Accepted) {
+      pendingAlarmHour_ = alarmHour;
+      pendingAlarmMinute_ = alarmMinute;
+      needsAlarmProgramming_ = false;
+      return true;
+    }
+    return false;
+  }
 
   int64_t targetMs = ((time_.nowMilliseconds() / 60000) + 1) * 60000;
   tm target{};
@@ -301,22 +468,16 @@ bool SmartClockApp::startProgramming(bool) {
     targetMs += 60000;
   }
 
-  uint8_t alarmHour = 0;
-  uint8_t alarmMinute = 0;
-  if (next_.valid) {
-    tm alarmLocal{};
-    localtime_r(&next_.epoch, &alarmLocal);
-    alarmHour = alarmLocal.tm_hour;
-    alarmMinute = alarmLocal.tm_min;
-  }
-  const bool alarmOn = next_.valid && data_.sharpAlarmGateEnabled;
   setSharpOutput(false);
   const auto accepted = sharp_.synchronize(
       target.tm_hour, target.tm_min, targetMs, next_.valid,
       alarmHour, alarmMinute, alarmOn, millis());
   if (accepted == SharpController::Result::Accepted) {
-    sharpOutputEnabled_ = false;
-    needsProgramming_ = false;
+    pendingAlarmHour_ = next_.valid ? alarmHour : 0;
+    pendingAlarmMinute_ = next_.valid ? alarmMinute : 0;
+    nativeAlarmKnown_ = false;
+    needsClockSync_ = false;
+    needsAlarmProgramming_ = false;
     return true;
   }
   return false;
@@ -361,7 +522,7 @@ void SmartClockApp::beginDismiss(time_t now) {
   setSharpOutput(false);
   dismissPhase_ = DismissPhase::HoldOff;
   dismissStartedMs_ = millis();
-  needsProgramming_ = true;
+  needsAlarmProgramming_ = true;
   network_.publishEvent("alarm.dismiss");
   markDirty();
 }
@@ -395,29 +556,54 @@ void SmartClockApp::suppressDue(
   }
   clearGateWithoutEntries();
   markDirty();
-  needsProgramming_ = true;
+  needsAlarmProgramming_ = true;
 }
 
 void SmartClockApp::updateSchedule(uint32_t nowMs) {
   if (!time_.valid()) return;
   const time_t now = time_.now();
 
-  if (time_.consumeSignificantStep()) needsProgramming_ = true;
+  if (time_.consumeSignificantStep()) needsClockSync_ = true;
 
   if (sharpWasBusy_ && !sharp_.busy()) {
+    const SharpController::Job finishedJob = sharp_.lastFinishedJob();
     if (!sharp_.lastSucceeded()) {
       Serial.printf("[error] Sharp operation failed: %s\n", sharp_.lastError());
-      needsProgramming_ = true;
+      if (finishedJob == SharpController::Job::Synchronize ||
+          finishedJob == SharpController::Job::ProgramAlarm ||
+          finishedJob == SharpController::Job::Reset) {
+        nativeAlarmKnown_ = false;
+        setSharpOutput(false);
+        needsAlarmProgramming_ = false;
+        needsClockSync_ = true;
+      }
       if (dismissPhase_ == DismissPhase::Programming) {
         dismissPhase_ = DismissPhase::HoldOff;
         dismissStartedMs_ = nowMs - Config::ALARM_DISMISS_OFF_MS;
       }
     } else {
       sharpOutputEnabled_ = sharp_.nativeAlarmEnabled();
+      if (finishedJob == SharpController::Job::Synchronize ||
+          finishedJob == SharpController::Job::ProgramAlarm) {
+        nativeAlarmKnown_ = true;
+        nativeAlarmHour_ = pendingAlarmHour_;
+        nativeAlarmMinute_ = pendingAlarmMinute_;
+      } else if (finishedJob == SharpController::Job::Reset) {
+        nativeAlarmKnown_ = true;
+        nativeAlarmHour_ = 0;
+        nativeAlarmMinute_ = 0;
+      }
       if (dismissPhase_ == DismissPhase::Programming)
         dismissPhase_ = DismissPhase::None;
-      Serial.println("[info] Sharp operation completed");
-      network_.publishEvent("clock.synchronized");
+      if (finishedJob == SharpController::Job::Synchronize) {
+        Serial.println("[info] Sharp clock synchronization completed");
+        network_.publishEvent("clock.synchronized");
+      } else if (finishedJob == SharpController::Job::ProgramAlarm) {
+        Serial.println("[info] Sharp alarm programming completed");
+        network_.publishEvent("alarm.programmed");
+      } else {
+        Serial.println("[info] Sharp operation completed");
+      }
     }
   }
   sharpWasBusy_ = sharp_.busy();
@@ -429,20 +615,25 @@ void SmartClockApp::updateSchedule(uint32_t nowMs) {
       return;
     }
     recomputeNext(now);
-    if (!next_.valid) {
+    if (!next_.valid && !needsClockSync_) {
       clearGateWithoutEntries();
       dismissPhase_ = DismissPhase::None;
-      needsProgramming_ = false;
+      needsAlarmProgramming_ = false;
       markDirty();
       return;
     }
-    if (startProgramming(true)) {
-      dismissPhase_ = DismissPhase::Programming;
-      sharpWasBusy_ = true;
+    if (startProgramming(needsClockSync_)) {
+      if (sharp_.busy()) {
+        dismissPhase_ = DismissPhase::Programming;
+        sharpWasBusy_ = true;
+      } else {
+        dismissPhase_ = DismissPhase::None;
+      }
     }
     return;
   }
   if (dismissPhase_ == DismissPhase::Programming || sharp_.busy()) return;
+  if (manualEditActive_ || manualEditPending_) return;
 
   tm local{};
   localtime_r(&now, &local);
@@ -450,7 +641,7 @@ void SmartClockApp::updateSchedule(uint32_t nowMs) {
       local.tm_min == Config::DAILY_SYNC_MINUTE &&
       lastDailySyncYday_ != local.tm_yday) {
     lastDailySyncYday_ = local.tm_yday;
-    needsProgramming_ = true;
+    needsClockSync_ = true;
   }
 
   if (ringing_) {
@@ -474,7 +665,10 @@ void SmartClockApp::updateSchedule(uint32_t nowMs) {
   recomputeNext(now);
   clearGateWithoutEntries();
 
-  if (needsProgramming_ && !sharp_.busy()) startProgramming(true);
+  if (needsClockSync_)
+    startProgramming(true);
+  else if (needsAlarmProgramming_)
+    startProgramming(false);
 }
 
 String SmartClockApp::buildStateJson() {
@@ -599,7 +793,7 @@ bool SmartClockApp::handleCommand(const String& request, String& response) {
         clearGateWithoutEntries();
       }
       markDirty();
-      needsProgramming_ = true;
+      needsAlarmProgramming_ = true;
     }
   } else if (action == "alarm.set_enabled") {
     Schedule::Alarm* alarm = findAlarm(data_, input["id"] | 0);
@@ -617,7 +811,7 @@ bool SmartClockApp::handleCommand(const String& request, String& response) {
       } else {
         clearGateWithoutEntries();
       }
-      markDirty(); needsProgramming_ = true;
+      markDirty(); needsAlarmProgramming_ = true;
     }
   } else if (action == "alarm.delete") {
     Schedule::Alarm* alarm = findAlarm(data_, input["id"] | 0);
@@ -626,7 +820,7 @@ bool SmartClockApp::handleCommand(const String& request, String& response) {
       *alarm = Schedule::Alarm{};
       clearGateWithoutEntries();
       markDirty();
-      needsProgramming_ = true;
+      needsAlarmProgramming_ = true;
     }
   } else if (action == "timer.create") {
     const uint16_t minutes = input["minutes"] | 0;
@@ -643,7 +837,7 @@ bool SmartClockApp::handleCommand(const String& request, String& response) {
       if (!masterEnabled_) timer->pausedRemainingSeconds = minutes * 60UL;
       data_.sharpAlarmGateEnabled = true;
       setSharpOutput(false);
-      markDirty(); needsProgramming_ = true;
+      markDirty(); needsAlarmProgramming_ = true;
     }
   } else if (action == "timer.set_enabled") {
     Schedule::Timer* timer = findTimer(data_, input["id"] | 0);
@@ -665,7 +859,7 @@ bool SmartClockApp::handleCommand(const String& request, String& response) {
       } else {
         clearGateWithoutEntries();
       }
-      markDirty(); needsProgramming_ = true;
+      markDirty(); needsAlarmProgramming_ = true;
     }
   } else if (action == "timer.delete") {
     Schedule::Timer* timer = findTimer(data_, input["id"] | 0);
@@ -674,7 +868,7 @@ bool SmartClockApp::handleCommand(const String& request, String& response) {
       *timer = Schedule::Timer{};
       clearGateWithoutEntries();
       markDirty();
-      needsProgramming_ = true;
+      needsAlarmProgramming_ = true;
     }
   } else if (action == "sharp_alarm.set_enabled") {
     if (!input["enabled"].is<bool>()) {
@@ -692,7 +886,7 @@ bool SmartClockApp::handleCommand(const String& request, String& response) {
     ok = false; error = "unsupported_action";
   } else if (action == "clock.sync") {
     if (!(input["confirm"] | false)) { ok = false; error = "confirmation_required"; }
-    else { needsProgramming_ = true; }
+    else { needsClockSync_ = true; }
   } else if (action == "clock.reset") {
     if (!(input["confirm"] | false)) { ok = false; error = "confirmation_required"; }
     else if (sharp_.reset(millis()) != SharpController::Result::Accepted) {
@@ -750,7 +944,7 @@ void SmartClockApp::processSerial(String command) {
       WiFi.localIP().toString().c_str());
   else if (command == "mqtt") Serial.printf("mqtt=%s\n",
       network_.mqttConnected() ? "connected" : "offline");
-  else if (command == "sync") needsProgramming_ = true;
+  else if (command == "sync") needsClockSync_ = true;
   else if (command == "test relay confirm") {
     if (sharp_.reset(millis()) != SharpController::Result::Accepted)
       Serial.println("[warn] relay test rejected: busy");

@@ -154,7 +154,7 @@ Top-level fields:
 - `controlMode`: `smart` or `manual_fallback`
 - `timeValid`, `timeStatus`, `epoch`
 - `wifiConnected`, `mqttConnected`
-- `sharpBusy` and optional `lastSharpError`
+- `sharpBusy` and optional `lastSharpError`; busy may mean clock synchronization or non-power-cycling alarm programming
 - `ringing`, `ringingInferred`
 - Optional `next {id,type,epoch}`
 - `alarms[]`, `timers[]`
@@ -199,12 +199,13 @@ The current generic ESP32 service only consumes event/status topics. Add a dedic
 - Render times in `America/Chicago`.
 - Show weekday chips and physical/manual badges.
 - Show suspended entries and paused timer duration while master is off.
-- Treat `alarm.suppressed`, `timer.suppressed`, and
+- Treat `alarm.suppressed`, `timer.suppressed`, `alarm.programmed`, and
   `sharp_alarm.gate_changed` as immediate events, then reconcile retained state.
 - Disable/reject controls while `sharpBusy` is true.
 - Keep disabled one-time alarms visible.
 - Do not expect custom text on the Sharp display.
 - Only one native alarm exists; if the ESP fails, only that programmed occurrence remains.
 - No RTC or buzzer feedback exists.
-- Manual alarm inference assumes every physical edit was observed.
+- Manual alarm inference assumes every physical edit was observed. Changed edits arm immediately; the single physical/manual entry is created or replaced after the one-minute settlement window.
+- Routine alarm/timer updates pulse ALARM/HOUR/MINUTE without interrupting Sharp power; only clock synchronization may blank the display.
 - Nonexistent spring DST times are skipped; repeated fall times fire once.

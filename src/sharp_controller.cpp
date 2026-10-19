@@ -46,6 +46,7 @@ SharpController::Result SharpController::tap(ControlId id, uint32_t nowMs) {
   if (id == ControlId::Count) return Result::Invalid;
   tapId_ = id;
   job_ = Job::Tap;
+  lastFinishedJob_ = Job::None;
   jobStartedMs_ = nowMs;
   lastSucceeded_ = false;
   write(id, true);
@@ -56,6 +57,7 @@ SharpController::Result SharpController::tap(ControlId id, uint32_t nowMs) {
 SharpController::Result SharpController::reset(uint32_t nowMs) {
   if (busy()) return Result::Busy;
   job_ = Job::Reset;
+  lastFinishedJob_ = Job::None;
   jobStartedMs_ = nowMs;
   programAlarm_ = false;
   lastSucceeded_ = false;
@@ -79,19 +81,48 @@ SharpController::Result SharpController::synchronize(
   programAlarm_ = programAlarm;
   alarmEnabled_ = alarmEnabled;
   job_ = Job::Synchronize;
+  lastFinishedJob_ = Job::None;
   jobStartedMs_ = nowMs;
   lastSucceeded_ = false;
   enter(Phase::ReleaseOutputs, nowMs);
   return Result::Accepted;
 }
 
+SharpController::Result SharpController::programAlarm(
+    uint8_t currentHour24, uint8_t currentMinute,
+    uint8_t targetHour24, uint8_t targetMinute,
+    bool alarmEnabled, uint32_t nowMs) {
+  if (busy()) return Result::Busy;
+  if (currentHour24 > 23 || currentMinute > 59 ||
+      targetHour24 > 23 || targetMinute > 59) {
+    return Result::Invalid;
+  }
+  alarmHourRemaining_ = static_cast<uint8_t>(
+      TimeUtils::forwardHourPresses(currentHour24, targetHour24));
+  alarmMinuteRemaining_ = static_cast<uint8_t>(
+      TimeUtils::forwardMinutePresses(currentMinute, targetMinute));
+  programAlarm_ = true;
+  alarmEnabled_ = alarmEnabled;
+  job_ = Job::ProgramAlarm;
+  lastFinishedJob_ = Job::None;
+  jobStartedMs_ = nowMs;
+  lastSucceeded_ = false;
+  write(ControlId::OnOff, false);
+  write(ControlId::Alarm, true);
+  enter(Phase::HoldAlarm, nowMs);
+  return Result::Accepted;
+}
+
 void SharpController::fail(const char* message) {
+  const Job failedJob = job_;
   releaseMomentary();
   digitalWrite(Config::RELAY_PIN, HIGH);
-  write(ControlId::OnOff, nativeAlarmEnabled_);
+  nativeAlarmEnabled_ = false;
+  write(ControlId::OnOff, false);
   strncpy(lastError_, message, sizeof(lastError_) - 1);
   lastError_[sizeof(lastError_) - 1] = '\0';
   lastSucceeded_ = false;
+  lastFinishedJob_ = failedJob;
   job_ = Job::None;
   phase_ = Phase::Failed;
 }
@@ -121,6 +152,7 @@ void SharpController::update(uint32_t nowMs, int64_t epochMs) {
       if (TimeUtils::elapsed(nowMs, phaseAtMs_, Config::BUTTON_RELEASE_MS)) {
         lastSucceeded_ = true;
         lastError_[0] = '\0';
+        lastFinishedJob_ = job_;
         job_ = Job::None;
         enter(Phase::Idle, nowMs);
         write(ControlId::OnOff, nativeAlarmEnabled_);
@@ -273,10 +305,16 @@ void SharpController::update(uint32_t nowMs, int64_t epochMs) {
       enter(Phase::Finish, nowMs);
       return;
     case Phase::Finish:
-      nativeAlarmEnabled_ = programAlarm_ ? alarmEnabled_ : nativeAlarmEnabled_;
+      if (job_ == Job::Synchronize)
+        nativeAlarmEnabled_ = programAlarm_ && alarmEnabled_;
+      else if (job_ == Job::ProgramAlarm)
+        nativeAlarmEnabled_ = alarmEnabled_;
+      else if (job_ == Job::Reset)
+        nativeAlarmEnabled_ = false;
       write(ControlId::OnOff, nativeAlarmEnabled_);
       lastSucceeded_ = true;
       lastError_[0] = '\0';
+      lastFinishedJob_ = job_;
       job_ = Job::None;
       enter(Phase::Idle, nowMs);
       return;

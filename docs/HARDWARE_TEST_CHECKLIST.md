@@ -83,11 +83,15 @@ Repeat near 12 AM, 12 PM, and 11:59 PM.
 Create near-future test entries.
 
 - [ ] ALARM + HOUR/MIN programs expected AM/PM.
-- [ ] Native indicator enables for the next occurrence.
+- [ ] Native indicator enables immediately when a changed physical edit releases ALARM.
+- [ ] The temporary manual entry appears after one minute without a second native programming cycle.
+- [ ] A later manual edit replaces the existing physical entry; the state never contains more than one physical alarm.
+- [ ] Holding ALARM without HOUR/MINUTE changes creates no entry.
 - [ ] ON/OFF changes logical master without directly mirroring Sharp output.
 - [ ] SNOOZE toggles the persisted Sharp gate only when an entry exists.
 - [ ] Gate OFF suppresses a due alarm/timer and does not replay it late.
-- [ ] Earlier entries replace later native programming.
+- [ ] Earlier entries replace later native programming incrementally.
+- [ ] Alarm/timer creation, edits, recurrence, suppression, and dismissal never blank the display or toggle the relay.
 - [ ] Master OFF suspends smart alarms/timers.
 - [ ] Physical manual alarm operates while master is OFF.
 - [ ] Manual edit appears after the one-minute settling window.
@@ -120,7 +124,7 @@ Record actual untouched buzzer duration: __________
 
 Test once without a noon alarm and once with a conflict.
 
-Pass: sync runs once, an active alarm wins, deferred sync runs afterward, and the next native alarm is restored.
+Pass: sync runs once, an active alarm wins, deferred sync runs afterward, the native alarm baseline is re-established from 12:00, and the next alarm is restored. Routine alarm changes do not power-cycle Sharp.
 
 ## Sign-off
 

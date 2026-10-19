@@ -27,8 +27,14 @@ class SmartClockApp {
   bool manualFallback_ = false;
   bool fallbackSharpEnabled_ = false;
   bool sharpOutputEnabled_ = false;
-  bool needsProgramming_ = true;
+  bool needsClockSync_ = true;
+  bool needsAlarmProgramming_ = false;
   bool sharpWasBusy_ = false;
+  bool nativeAlarmKnown_ = false;
+  uint8_t nativeAlarmHour_ = 0;
+  uint8_t nativeAlarmMinute_ = 0;
+  uint8_t pendingAlarmHour_ = 0;
+  uint8_t pendingAlarmMinute_ = 0;
   bool ringing_ = false;
   uint32_t bootMs_ = 0;
   uint32_t ringStartedMs_ = 0;
@@ -39,6 +45,8 @@ class SmartClockApp {
 
   bool manualEditActive_ = false;
   bool manualEditPending_ = false;
+  bool manualEditChanged_ = false;
+  bool manualOutputBeforeEdit_ = false;
   uint8_t manualHour_ = 0;
   uint8_t manualMinute_ = 0;
   uint32_t manualLastEditMs_ = 0;
@@ -60,6 +68,8 @@ class SmartClockApp {
   bool setSharpAlarmGate(bool enabled, time_t now, const char* source);
   void setSharpOutput(bool enabled);
   bool hasEnabledEntries() const;
+  bool hasGateEligibleEntry() const;
+  bool nativeAlarmMatches(uint8_t hour, uint8_t minute) const;
   void clearGateWithoutEntries();
   void enterManualFallback();
   void exitManualFallback();

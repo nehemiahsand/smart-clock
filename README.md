@@ -22,9 +22,10 @@ The clock contains mains voltage near the transformer primary.
 - Independent logical master and persisted Sharp alarm gate.
 - Physical SNOOZE click toggles the Sharp gate; there is no hold action.
 - Noon time synchronization using NTP and current US Central DST rules.
+- Incremental native-alarm programming that never interrupts Sharp power.
 - Ten recurring/one-time alarms and five persistent timers.
 - Five-minute missed-alarm grace and inferred ringing window.
-- Physical alarm-edit import after a one-minute settling period.
+- Physical alarm edits auto-arm on ALARM release and update the single manual-alarm slot after a one-minute settling period.
 - CRC-validated Preferences/NVS storage.
 - TLS MQTT, bearer-authenticated HTTP, and password-authenticated OTA.
 - Host tests for timing, debounce, scheduling, timer recovery, and DST rules.
@@ -64,7 +65,7 @@ Classic Arduino OTA is password-authenticated but not guaranteed to be transport
 4. Scheduling stays disabled until time is valid.
 5. Physical controls unlock on valid time; after 30 seconds without valid time,
    standalone Sharp fallback passes ordinary controls through.
-6. Saved schedules restore and the earliest occurrence is programmed.
+6. Startup synchronization power-cycles Sharp, establishes a 12:00 native-alarm baseline, and programs the earliest saved occurrence.
 7. Local alarms continue through temporary Wi-Fi/MQTT loss.
 8. Master OFF pauses timers and suspends smart alarms while physical manual
    alarms remain eligible.
@@ -75,6 +76,11 @@ eligible occurrence is programmed. Creating, enabling, or materially editing an
 alarm or timer explicitly arms the gate. A SNOOZE click toggles the gate; long
 presses have no action. PWA dismissal is separate: it holds Sharp OFF, completes
 the current occurrence, programs the next one, then restores the prior gate.
+
+Routine alarm and timer changes hold ALARM and advance HOUR/MINUTE from the
+last known native alarm. They never toggle the power relay. Relay power cycling
+is reserved for startup, noon/explicit clock sync, significant time correction,
+and recovery after an uncertain partial operation.
 
 Only one alarm can be stored in the Sharp controller. If the ESP32 fails, only that programmed occurrence remains.
 
