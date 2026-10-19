@@ -25,7 +25,7 @@ The clock contains mains voltage near the transformer primary.
 - Incremental native-alarm programming that never interrupts Sharp power.
 - Ten recurring/one-time alarms and five persistent timers.
 - Five-minute missed-alarm grace and inferred ringing window.
-- Physical alarm edits auto-arm on ALARM release and update the single manual-alarm slot after a one-minute settling period.
+- Physical alarm edits auto-arm and update the single manual-alarm slot immediately when ALARM is released; held HOUR/MINUTE presses are tracked at the Sharp native two-per-second repeat rate.
 - CRC-validated Preferences/NVS storage.
 - TLS MQTT, bearer-authenticated HTTP, and password-authenticated OTA.
 - Host tests for timing, debounce, scheduling, timer recovery, and DST rules.

@@ -13,6 +13,7 @@ int hourPressesFromMidnight(int hour24);
 int minuteBeforeTarget(int minute);
 int forwardHourPresses(int currentHour24, int targetHour24);
 int forwardMinutePresses(int currentMinute, int targetMinute);
+uint32_t heldButtonPresses(uint32_t heldMs, uint32_t repeatMs);
 uint32_t estimateButtonSequenceMs(int hourPresses, int minutePresses,
                                   uint32_t modeStartMs, uint32_t pressMs,
                                   uint32_t releaseMs, uint32_t modeEndMs);

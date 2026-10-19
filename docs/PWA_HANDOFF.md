@@ -206,6 +206,6 @@ The current generic ESP32 service only consumes event/status topics. Add a dedic
 - Do not expect custom text on the Sharp display.
 - Only one native alarm exists; if the ESP fails, only that programmed occurrence remains.
 - No RTC or buzzer feedback exists.
-- Manual alarm inference assumes every physical edit was observed. Changed edits arm immediately; the single physical/manual entry is created or replaced after the one-minute settlement window.
+- Manual alarm inference assumes every physical edit was observed. Changed edits arm and create or replace the single physical/manual entry immediately on ALARM release. Held HOUR/MINUTE presses count once initially and then every 500 ms.
 - Routine alarm/timer updates pulse ALARM/HOUR/MINUTE without interrupting Sharp power; only clock synchronization may blank the display.
 - Nonexistent spring DST times are skipped; repeated fall times fire once.

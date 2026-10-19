@@ -244,6 +244,35 @@ bool SmartClockApp::setSharpAlarmGate(
   return true;
 }
 
+void SmartClockApp::finishManualAdjustment(ControlId control, uint32_t nowMs) {
+  bool* pressed = nullptr;
+  uint32_t pressedAtMs = 0;
+  uint8_t* value = nullptr;
+  uint8_t modulus = 0;
+  if (control == ControlId::Hour) {
+    pressed = &manualHourPressed_;
+    pressedAtMs = manualHourPressedAtMs_;
+    value = &manualHour_;
+    modulus = 24;
+  } else if (control == ControlId::Minute) {
+    pressed = &manualMinutePressed_;
+    pressedAtMs = manualMinutePressedAtMs_;
+    value = &manualMinute_;
+    modulus = 60;
+  } else {
+    return;
+  }
+  if (!*pressed) return;
+  *pressed = false;
+  const uint32_t steps = TimeUtils::heldButtonPresses(
+      static_cast<uint32_t>(nowMs - pressedAtMs),
+      Config::MANUAL_BUTTON_REPEAT_MS);
+  *value = static_cast<uint8_t>((*value + steps) % modulus);
+  manualEditChanged_ = true;
+  Serial.printf("[info] physical %s advanced %lu step(s)\n",
+                controlName(control), static_cast<unsigned long>(steps));
+}
+
 void SmartClockApp::handleInput(const InputEvent& event, uint32_t nowMs) {
   if (!controlsUnlocked_) return;
   if (event.control == ControlId::OnOff) {
@@ -299,6 +328,8 @@ void SmartClockApp::handleInput(const InputEvent& event, uint32_t nowMs) {
     if (event.type == InputEventType::Pressed) {
       manualEditActive_ = true;
       manualEditChanged_ = false;
+      manualHourPressed_ = false;
+      manualMinutePressed_ = false;
       manualOutputBeforeEdit_ = sharpOutputEnabled_;
       if (nativeAlarmKnown_) {
         manualHour_ = nativeAlarmHour_;
@@ -309,6 +340,10 @@ void SmartClockApp::handleInput(const InputEvent& event, uint32_t nowMs) {
       }
       if (!manualFallback_) setSharpOutput(false);
     } else if (event.type == InputEventType::Released && manualEditActive_) {
+      finishManualAdjustment(ControlId::Hour, nowMs);
+      finishManualAdjustment(ControlId::Minute, nowMs);
+      sharp_.setManualOutput(ControlId::Hour, false);
+      sharp_.setManualOutput(ControlId::Minute, false);
       manualEditActive_ = false;
       if (!manualEditChanged_) {
         if (!manualFallback_) setSharpOutput(manualOutputBeforeEdit_);
@@ -319,7 +354,6 @@ void SmartClockApp::handleInput(const InputEvent& event, uint32_t nowMs) {
       nativeAlarmHour_ = manualHour_;
       nativeAlarmMinute_ = manualMinute_;
       manualEditPending_ = true;
-      manualLastEditMs_ = nowMs;
       needsAlarmProgramming_ = false;
       const bool gateChanged = !data_.sharpAlarmGateEnabled;
       data_.sharpAlarmGateEnabled = true;
@@ -330,16 +364,23 @@ void SmartClockApp::handleInput(const InputEvent& event, uint32_t nowMs) {
             "{\"enabled\":true,\"source\":\"physical-manual\"}");
       }
       markDirty();
-      Serial.printf("[info] physical alarm pending %02u:%02u\n",
-                    manualHour_, manualMinute_);
+      updateManualImport(nowMs);
+      if (manualEditPending_)
+        Serial.printf("[info] physical alarm awaiting valid time %02u:%02u\n",
+                      manualHour_, manualMinute_);
     }
-  } else if (manualEditActive_ && event.type == InputEventType::Clicked) {
-    if (event.control == ControlId::Hour) {
-      manualHour_ = static_cast<uint8_t>((manualHour_ + 1) % 24);
-      manualEditChanged_ = true;
-    } else if (event.control == ControlId::Minute) {
-      manualMinute_ = static_cast<uint8_t>((manualMinute_ + 1) % 60);
-      manualEditChanged_ = true;
+  } else if (manualEditActive_ &&
+             (event.control == ControlId::Hour ||
+              event.control == ControlId::Minute)) {
+    bool& pressed = event.control == ControlId::Hour
+        ? manualHourPressed_ : manualMinutePressed_;
+    uint32_t& pressedAtMs = event.control == ControlId::Hour
+        ? manualHourPressedAtMs_ : manualMinutePressedAtMs_;
+    if (event.type == InputEventType::Pressed && !pressed) {
+      pressed = true;
+      pressedAtMs = nowMs;
+    } else if (event.type == InputEventType::Released) {
+      finishManualAdjustment(event.control, nowMs);
     }
   }
 }
@@ -384,19 +425,14 @@ bool SmartClockApp::addPhysicalAlarm(time_t now) {
   return true;
 }
 
-void SmartClockApp::updateManualImport(uint32_t nowMs) {
-  if (!manualEditPending_ ||
-      !TimeUtils::elapsed(nowMs, manualLastEditMs_, Config::MANUAL_ALARM_SETTLE_MS))
-    return;
-  if (!time_.valid()) {
-    return;
-  }
+void SmartClockApp::updateManualImport(uint32_t) {
+  if (!manualEditPending_ || !time_.valid()) return;
   manualEditPending_ = false;
   if (addPhysicalAlarm(time_.now()))
-    Serial.printf("[info] imported physical alarm %02u:%02u\n",
+    Serial.printf("[info] saved physical alarm %02u:%02u\n",
                   manualHour_, manualMinute_);
   else {
-    Serial.println("[error] alarm capacity full; physical alarm not imported");
+    Serial.println("[error] alarm capacity full; physical alarm not saved");
     needsAlarmProgramming_ = true;
   }
 }

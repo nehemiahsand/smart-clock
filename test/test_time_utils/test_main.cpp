@@ -26,6 +26,13 @@ void test_forward_alarm_press_calculations() {
   TEST_ASSERT_EQUAL(10, TimeUtils::forwardMinutePresses(55, 5));
   TEST_ASSERT_EQUAL(59, TimeUtils::forwardMinutePresses(1, 0));
 }
+void test_held_button_repeat_count() {
+  TEST_ASSERT_EQUAL_UINT32(1, TimeUtils::heldButtonPresses(0, 500));
+  TEST_ASSERT_EQUAL_UINT32(1, TimeUtils::heldButtonPresses(499, 500));
+  TEST_ASSERT_EQUAL_UINT32(2, TimeUtils::heldButtonPresses(500, 500));
+  TEST_ASSERT_EQUAL_UINT32(3, TimeUtils::heldButtonPresses(1100, 500));
+  TEST_ASSERT_EQUAL_UINT32(1, TimeUtils::heldButtonPresses(5000, 0));
+}
 void test_sequence_estimate() {
   TEST_ASSERT_EQUAL_UINT32(
       2100, TimeUtils::estimateButtonSequenceMs(1, 2, 600, 250, 150, 300));
@@ -36,6 +43,7 @@ int main(int, char**) {
   RUN_TEST(test_reached_is_wrap_safe);
   RUN_TEST(test_press_calculations);
   RUN_TEST(test_forward_alarm_press_calculations);
+  RUN_TEST(test_held_button_repeat_count);
   RUN_TEST(test_sequence_estimate);
   return UNITY_END();
 }

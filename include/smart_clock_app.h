@@ -49,7 +49,10 @@ class SmartClockApp {
   bool manualOutputBeforeEdit_ = false;
   uint8_t manualHour_ = 0;
   uint8_t manualMinute_ = 0;
-  uint32_t manualLastEditMs_ = 0;
+  bool manualHourPressed_ = false;
+  bool manualMinutePressed_ = false;
+  uint32_t manualHourPressedAtMs_ = 0;
+  uint32_t manualMinutePressedAtMs_ = 0;
 
   String terminalLine_;
   String recentRequestIds_[8];
@@ -62,6 +65,7 @@ class SmartClockApp {
 
   void handleInputs(uint32_t nowMs);
   void handleInput(const InputEvent& event, uint32_t nowMs);
+  void finishManualAdjustment(ControlId control, uint32_t nowMs);
   void updateSchedule(uint32_t nowMs);
   void updateManualImport(uint32_t nowMs);
   void setMaster(bool enabled, time_t now, const char* source);

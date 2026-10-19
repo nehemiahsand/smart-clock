@@ -44,7 +44,7 @@ All inputs are provisionally active-low with `INPUT_PULLUP`.
 - Power restoration resets the displayed time to 12:00 AM.
 - Native alarm enable is derived from the persisted Sharp gate plus an eligible
   programmed occurrence; it never directly mirrors the maintained switch.
-- HOUR cycles through AM/PM; use individual pulses, never auto-repeat.
+- HOUR cycles through AM/PM. ESP-driven programming uses individual pulses; a physical hold uses the Sharp native two-per-second auto-repeat and firmware tracks that cadence.
 - Provisional timing: 250 ms press, 150 ms release, 10 s power-off, 3 s boot.
 - Routine alarm selection advances from the tracked native alarm with ALARM held and never interrupts power.
 - Successful power-cycle synchronization re-establishes the native alarm baseline at 12:00; a partial programming failure marks it unknown and requests recovery sync.
@@ -56,9 +56,9 @@ All inputs are provisionally active-low with `INPUT_PULLUP`.
 
 - 10 smart alarm entries; recurring weekday or dated one-time.
 - PWA one-time alarms remain stored but disabled after firing.
-- There is one physical manual-alarm slot. A new settled edit replaces its temporary one-time entry, which is deleted after use.
+- There is one physical manual-alarm slot. A changed edit immediately replaces its temporary one-time entry, which is deleted after use.
 - Physical entries target the next occurrence: today if upcoming, otherwise tomorrow.
-- A changed manual alarm auto-arms immediately on ALARM release; its temporary entry is committed after one minute, restarted by each additional edit.
+- A changed manual alarm auto-arms and replaces its temporary entry immediately on ALARM release.
 - Viewing the alarm without changing HOUR or MINUTE creates no entry.
 - Physical origin is reported to the backend.
 - Missed-alarm grace: 5 minutes.
@@ -189,8 +189,15 @@ Software builds and host tests do not verify electrical behavior.
 - 2026-10-18: Live 11:42 PM test passed end to end with the logical master OFF:
   the physical alarm rang on schedule, SNOOZE disabled the Sharp gate/output,
   ringing cleared, and the temporary manual entry deleted itself.
-- 2026-10-18: Replacement manual alarm saved as the sole physical entry for
-  6:28 AM October 19 with master OFF and Sharp gate/output enabled.
+- 2026-10-18: A held-button test exposed tracking drift: the ESP saved 6:29 AM
+  while the Sharp display was actually 6:47 AM. Physical HOUR/MINUTE holds were
+  confirmed to advance initially and then about twice per second.
+- 2026-10-18: Removed the manual-alarm settlement delay and added 500 ms
+  native hold tracking. Native suite passed 18/18; ESP32 release build used
+  995,765 bytes flash (76.0%) and 49,776 bytes RAM (15.2%).
+- 2026-10-18: Live correction test advanced MINUTE from 6:29 to 6:47 by
+  holding it: firmware counted 18 steps, saved ID 4 immediately as 6:47 AM,
+  and left master OFF with Sharp gate/output enabled and controller idle.
 - 2026-10-18: USB flash verified on ESP32 MAC `d4:e9:f4:e5:e6:0c`;
   API v2 boot and 30-second `manual_fallback` transition observed over serial.
 - Hardware behavior, MQTT TLS, HTTP, and OTA remain unverified on the actual devices.

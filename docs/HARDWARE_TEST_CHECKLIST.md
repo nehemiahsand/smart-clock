@@ -84,9 +84,10 @@ Create near-future test entries.
 
 - [ ] ALARM + HOUR/MIN programs expected AM/PM.
 - [ ] Native indicator enables immediately when a changed physical edit releases ALARM.
-- [ ] The temporary manual entry appears after one minute without a second native programming cycle.
+- [x] The temporary manual entry appears immediately on ALARM release without a second native programming cycle.
 - [ ] A later manual edit replaces the existing physical entry; the state never contains more than one physical alarm.
 - [ ] Holding ALARM without HOUR/MINUTE changes creates no entry.
+- [x] A short HOUR/MINUTE press counts once; a held press tracks the Sharp display at two steps per second.
 - [ ] ON/OFF changes logical master without directly mirroring Sharp output.
 - [ ] SNOOZE toggles the persisted Sharp gate only when an entry exists.
 - [ ] Gate OFF suppresses a due alarm/timer and does not replay it late.
@@ -95,7 +96,7 @@ Create near-future test entries.
 - [ ] Master OFF suspends smart alarms/timers.
 - [x] Physical manual alarm operates while master is OFF.
 - [x] Temporary physical entry deletes itself after the alarm is dismissed.
-- [ ] Manual edit appears after the one-minute settling window.
+- [x] Manual edit appears immediately when ALARM is released.
 
 ## 8. Ringing
 
