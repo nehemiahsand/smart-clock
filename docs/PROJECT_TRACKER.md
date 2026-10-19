@@ -202,4 +202,7 @@ Software builds and host tests do not verify electrical behavior.
   and left master OFF with Sharp gate/output enabled and controller idle.
 - 2026-10-18: USB flash verified on ESP32 MAC `d4:e9:f4:e5:e6:0c`;
   API v2 boot and 30-second `manual_fallback` transition observed over serial.
+- 2026-10-19: The unattended 6:30 AM physical alarm fired correctly with the
+  logical master OFF. Physical clock access is no longer available; Pi/backend
+  and PWA work must proceed with mocks until one future USB provisioning flash.
 - Hardware behavior, MQTT TLS, HTTP, and OTA remain unverified on the actual devices.

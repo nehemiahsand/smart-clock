@@ -1,6 +1,6 @@
 # Session Handoff
 
-Last updated: 2026-10-18 (America/Chicago)
+Last updated: 2026-10-19 (America/Chicago)
 
 ## Resume here
 
@@ -30,6 +30,9 @@ The last serial `status` response reported:
 
 The live state is authoritative. Query `status` again before relying on this
 snapshot because physical controls may have changed it afterward.
+
+The user no longer has physical access to the clock. Do not plan additional USB,
+serial, button, or electrical tests until access returns.
 
 ## Implemented behavior
 
@@ -64,6 +67,22 @@ snapshot because physical controls may have changed it afterward.
 - A held MINUTE test advanced the Sharp from 6:29 to 6:47. Firmware counted 18
   steps and saved 6:47 immediately, proving the hold-tracking correction.
 - A later live status query showed the current alarm had been changed to 6:30 AM.
+- The unattended 6:30 AM alarm fired correctly on October 19 with the logical
+  master OFF, confirming the overnight local-alarm path.
+
+## Current remote-access limitation
+
+The installed clock has Wi-Fi credentials, but its MQTT CA/username/password,
+HTTP bearer token, and OTA password were left blank. In this firmware:
+
+- MQTT will not connect without a CA certificate and username.
+- HTTP rejects every request when the bearer token is shorter than 16 characters.
+- Arduino OTA does not start when the OTA password is shorter than 12 characters.
+
+The Pi broker, backend, and PWA can be implemented and tested with mocks now,
+but this deployed clock cannot join them or receive an OTA update. When physical
+access returns, it needs one USB flash with all secrets provisioned. After that,
+future firmware updates can use OTA on the trusted LAN.
 
 ## Important invariants
 
@@ -79,17 +98,18 @@ snapshot because physical controls may have changed it afterward.
 
 ## Remaining work
 
-1. Complete unchecked items in `HARDWARE_TEST_CHECKLIST.md`, especially relay
-   behavior during ESP reset, exact hidden-second sync, rollovers, five-minute
-   untouched ringing, recurrence/suppression, fallback, and recovery tests.
-2. Configure MQTT TLS credentials/CA, HTTP bearer token, and OTA password in the
+1. On the Pi, configure Mosquitto for encrypted MQTT and migrate other ESP
+   clients away from plaintext.
+2. Implement the smart-mirror backend and PWA from `PWA_HANDOFF.md`, using a
+   mock clock client until the real clock can be provisioned.
+3. Prepare MQTT TLS credentials/CA, HTTP bearer token, and OTA password for the
    ignored `include/secrets.h`; verify broker hostname/certificate matching.
-3. Configure Mosquitto for encrypted MQTT and migrate other ESP clients away
-   from plaintext before enabling the smart-mirror backend integration.
-4. Hand `PWA_HANDOFF.md` to the smart-mirror/PWA agent. Do not build the PWA in
-   this repository.
-5. Keep a backup alarm until overnight reliability and remaining electrical
-   safety checks are complete.
+4. When physical access returns, perform one USB flash with those secrets, then
+   verify MQTT retained state, commands, HTTP authentication, and OTA.
+5. Complete remaining unchecked hardware tests when clock access returns,
+   especially relay reset behavior, hidden-second sync, rollovers, untouched
+   ringing duration, recurrence/suppression, fallback, and recovery.
+6. Keep a backup alarm until remaining electrical safety checks are complete.
 
 ## Useful commands
 
