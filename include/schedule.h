@@ -4,7 +4,10 @@
 
 namespace Schedule {
 enum class Origin : uint8_t { Pwa, Recurring, OneTime, Timer, Physical };
-enum class EntryState : uint8_t { Disabled, Scheduled, Suspended, Ringing, Snoozed, Fired };
+enum class EntryState : uint8_t {
+  Disabled, Scheduled, Suspended, Ringing, Snoozed, Fired, Suppressed
+};
+enum class Completion : uint8_t { Fired, Suppressed };
 
 struct Alarm {
   uint32_t id = 0;
@@ -50,6 +53,10 @@ Occurrence dueOccurrence(const Alarm* alarms, uint8_t alarmCount,
 bool isDue(time_t target, time_t now, int32_t graceSeconds);
 void suspendTimers(Timer* timers, uint8_t count, time_t now);
 void resumeTimers(Timer* timers, uint8_t count, time_t now);
+void completeAlarm(Alarm& alarm, time_t occurrenceEpoch, Completion completion);
+void completeTimer(Timer& timer, Completion completion);
+bool hasEnabledEntries(const Alarm* alarms, uint8_t alarmCount,
+                       const Timer* timers, uint8_t timerCount);
 const char* originName(Origin origin);
 const char* stateName(EntryState state);
 }  // namespace Schedule

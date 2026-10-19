@@ -32,8 +32,8 @@ All inputs are provisionally active-low with `INPUT_PULLUP`.
 | HOUR | 19 | 26 | Momentary |
 | MIN | 21 | 27 | Momentary |
 | ALARM | 22 | 14 | Momentary; held while editing |
-| SNOOZE | 16 | 13 | Momentary; short=dismiss, 2 s=snooze |
-| ON/OFF | 17 | 33 | Maintained; provisionally LOW=ON |
+| SNOOZE | 16 | 13 | Momentary input; click toggles logical Sharp alarm gate |
+| ON/OFF | 17 | 33 | Maintained input; provisionally LOW=logical master ON |
 
 - Relay: GPIO 23, active-low; LOW interrupts Sharp power.
 - GPIO 32 remains unused; a future book switch is documentation-only.
@@ -42,7 +42,8 @@ All inputs are provisionally active-low with `INPUT_PULLUP`.
 ## Sharp behavior and timing
 
 - Power restoration resets the displayed time to 12:00 AM.
-- Native alarm enable state follows the maintained ON/OFF state.
+- Native alarm enable is derived from the persisted Sharp gate plus an eligible
+  programmed occurrence; it never directly mirrors the maintained switch.
 - HOUR cycles through AM/PM; use individual pulses, never auto-repeat.
 - Provisional timing: 250 ms press, 150 ms release, 10 s power-off, 3 s boot.
 - Hold TIME or ALARM while pulsing HOUR/MIN.
@@ -71,26 +72,33 @@ All inputs are provisionally active-low with `INPUT_PULLUP`.
 
 ## Master and alarm interaction
 
-- Physical ON/OFF controls the smart master.
+- Physical ON/OFF controls only the logical smart master.
 - Master off suspends all smart alarms/timers without retroactive firing.
 - A physical manual alarm may operate while master is off and is the only active occurrence.
 - Smart entries remain visible as suspended.
-- Short SNOOZE dismisses; 2-second hold snoozes for 5 minutes.
+- Physical SNOOZE click toggles the persisted global Sharp alarm gate.
+- Creating, enabling, or materially editing an enabled alarm/timer arms the gate.
+- Automatic recurrence/selection never changes a gate the user turned off.
+- Gate OFF suppresses due alarms/timers without late replay.
+- PWA dismissal temporarily forces Sharp OFF, programs the next occurrence, and
+  restores the prior gate; it does not change the global gate.
+- Long SNOOZE presses have no action.
 - Completion conditions are future documentation only.
 
 ## Inferred ringing
 
 - No buzzer-sense input is planned.
-- Infer ringing at the scheduled time until dismiss, snooze, or 5 minutes elapse.
+- Infer ringing at the scheduled time until dismiss, gate-off, or 5 minutes elapse.
 - Always label ringing as inferred.
-- Native snooze duration is provisionally 5 minutes.
 
 ## Time and recovery
 
 - Use NTP with current `America/Chicago` rules.
 - Continue on the ESP clock through temporary network outages.
 - After total power loss, disable scheduling until NTP validates time.
-- After a timeout, allow ordinary physical controls even with invalid time.
+- After 30 seconds without valid time, enter standalone fallback: pass
+  TIME/HOUR/MIN/ALARM, mirror maintained ON/OFF, and let SNOOZE toggle Sharp
+  ON/OFF until valid time returns.
 - Restore schedules/timers after restart.
 - Recalculate after meaningful time corrections and resync Sharp when safe.
 - No RTC is planned.
@@ -115,7 +123,7 @@ All inputs are provisionally active-low with `INPUT_PULLUP`.
 
 - Physical, serial, MQTT, HTTP, and automation share one command engine.
 - Busy commands are rejected, not queued.
-- Logical virtual controls resemble the physical clock and use smart mappings.
+- Logical virtual ON/OFF toggles master; logical SNOOZE toggles the Sharp gate.
 - Raw native-output diagnostics remain separate.
 - Remote relay reset/sync requires literal confirmation.
 - Logging: INFO default, configurable DEBUG/WARN/ERROR.
@@ -127,7 +135,7 @@ Do not implement the PWA here. The handoff must define:
 
 - Alarm/timer CRUD, master state, and suspend/resume behavior.
 - Origin labels: PWA, recurring, one-time, timer, and physical.
-- Next native alarm, inferred ringing, snooze/dismiss, sync/network health, and errors.
+- Next native alarm, inferred ringing, gate/dismiss, sync/network health, and errors.
 - A future 3D clock with logical buttons plus separate raw diagnostics.
 - MQTT/HTTP schemas and guarded commands.
 - Mosquitto TLS, backend `mqtts://`, trust/hostname validation, and migration of other ESP clients away from plaintext MQTT.
@@ -151,7 +159,6 @@ Do not implement the PWA here. The handoff must define:
 - [ ] Verify final MIN pulse resets hidden seconds.
 - [ ] Confirm press/release/reset/boot timings.
 - [ ] Confirm alarm HOUR/MIN rollover.
-- [ ] Confirm native snooze is 5 minutes.
 - [ ] Confirm untouched buzzer stops after about 5 minutes.
 - [ ] Confirm broker hostname resolution and TLS certificate name.
 
@@ -164,4 +171,10 @@ Software builds and host tests do not verify electrical behavior.
 - 2026-10-16: Native suite passed 13/13 tests covering wrap-safe timing, debounce, scheduling, timer pause/resume, missed-alarm grace, and DST policies.
 - 2026-10-16: Final ESP32 release build succeeded: 989,817 bytes flash (75.5%) and 49,752 bytes RAM (15.2%).
 - 2026-10-16: `git diff --check` passed.
+- 2026-10-18: Logical master, persisted Sharp alarm gate, suppression,
+  transient dismissal, API v2, and standalone fallback implemented.
+- 2026-10-18: Native suite passed 16/16 tests; ESP32 release build succeeded
+  at 993,229 bytes flash (75.8%) and 49,768 bytes RAM (15.2%).
+- 2026-10-18: USB flash verified on ESP32 MAC `d4:e9:f4:e5:e6:0c`;
+  API v2 boot and 30-second `manual_fallback` transition observed over serial.
 - Hardware behavior, MQTT TLS, HTTP, and OTA remain unverified on the actual devices.

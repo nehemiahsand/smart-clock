@@ -165,6 +165,35 @@ void resumeTimers(Timer* timers, uint8_t count, time_t now) {
   }
 }
 
+void completeAlarm(Alarm& alarm, time_t occurrenceEpoch,
+                   Completion completion) {
+  alarm.lastFiredEpoch = occurrenceEpoch;
+  if (alarm.recurring) {
+    alarm.state = EntryState::Scheduled;
+  } else if (alarm.temporary) {
+    alarm = Alarm{};
+  } else {
+    alarm.enabled = false;
+    alarm.state = completion == Completion::Suppressed
+        ? EntryState::Suppressed : EntryState::Fired;
+  }
+}
+
+void completeTimer(Timer& timer, Completion completion) {
+  timer.enabled = false;
+  timer.state = completion == Completion::Suppressed
+      ? EntryState::Suppressed : EntryState::Fired;
+}
+
+bool hasEnabledEntries(const Alarm* alarms, uint8_t alarmCount,
+                       const Timer* timers, uint8_t timerCount) {
+  for (uint8_t i = 0; i < alarmCount; ++i)
+    if (alarms[i].used && alarms[i].enabled) return true;
+  for (uint8_t i = 0; i < timerCount; ++i)
+    if (timers[i].used && timers[i].enabled) return true;
+  return false;
+}
+
 const char* originName(Origin origin) {
   switch (origin) {
     case Origin::Pwa: return "pwa";
@@ -184,6 +213,7 @@ const char* stateName(EntryState state) {
     case EntryState::Ringing: return "ringing";
     case EntryState::Snoozed: return "snoozed";
     case EntryState::Fired: return "fired";
+    case EntryState::Suppressed: return "suppressed";
   }
   return "unknown";
 }

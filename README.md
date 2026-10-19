@@ -19,7 +19,8 @@ The clock contains mains voltage near the transformer primary.
 
 - Safe PC817/relay initialization and non-blocking control state machines.
 - Debounced momentary controls plus a maintained ON/OFF smart-master switch.
-- Short SNOOZE dismiss and two-second SNOOZE hold.
+- Independent logical master and persisted Sharp alarm gate.
+- Physical SNOOZE click toggles the Sharp gate; there is no hold action.
 - Noon time synchronization using NTP and current US Central DST rules.
 - Ten recurring/one-time alarms and five persistent timers.
 - Five-minute missed-alarm grace and inferred ringing window.
@@ -61,11 +62,19 @@ Classic Arduino OTA is password-authenticated but not guaranteed to be transport
 2. Physical ON/OFF initializes the smart master.
 3. Wi-Fi/NTP retry without a long startup wait.
 4. Scheduling stays disabled until time is valid.
-5. Physical controls unlock on valid time or after 30 seconds.
+5. Physical controls unlock on valid time; after 30 seconds without valid time,
+   standalone Sharp fallback passes ordinary controls through.
 6. Saved schedules restore and the earliest occurrence is programmed.
 7. Local alarms continue through temporary Wi-Fi/MQTT loss.
-8. Master OFF pauses timers and suspends smart alarms.
+8. Master OFF pauses timers and suspends smart alarms while physical manual
+   alarms remain eligible.
 9. Meaningful time correction triggers safe Sharp resynchronization.
+
+The Sharp alarm output is ON only when the persisted gate is enabled and an
+eligible occurrence is programmed. Creating, enabling, or materially editing an
+alarm or timer explicitly arms the gate. A SNOOZE click toggles the gate; long
+presses have no action. PWA dismissal is separate: it holds Sharp OFF, completes
+the current occurrence, programs the next one, then restores the prior gate.
 
 Only one alarm can be stored in the Sharp controller. If the ESP32 fails, only that programmed occurrence remains.
 

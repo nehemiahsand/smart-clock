@@ -39,7 +39,10 @@ Pass: Only the requested output activates and every momentary output returns LOW
 
 ## 3. Inputs
 
-Verify clean serial events for TIME, HOUR, MIN, ALARM, and SNOOZE. Verify SNOOZE click and two-second hold. Confirm ON/OFF ON reads LOW and OFF reads HIGH. If polarity is reversed, correct firmware configuration before continuing.
+Verify clean serial events for TIME, HOUR, MIN, ALARM, and SNOOZE. Verify a
+SNOOZE click toggles exactly once and a two-second hold has no action. Confirm
+ON/OFF ON reads LOW and OFF reads HIGH. If polarity is reversed, correct
+firmware configuration before continuing.
 
 ## 4. Relay interruption
 
@@ -81,6 +84,9 @@ Create near-future test entries.
 
 - [ ] ALARM + HOUR/MIN programs expected AM/PM.
 - [ ] Native indicator enables for the next occurrence.
+- [ ] ON/OFF changes logical master without directly mirroring Sharp output.
+- [ ] SNOOZE toggles the persisted Sharp gate only when an entry exists.
+- [ ] Gate OFF suppresses a due alarm/timer and does not replay it late.
 - [ ] Earlier entries replace later native programming.
 - [ ] Master OFF suspends smart alarms/timers.
 - [ ] Physical manual alarm operates while master is OFF.
@@ -90,12 +96,10 @@ Create near-future test entries.
 
 Record actual untouched buzzer duration: __________
 
-Record actual native snooze interval: __________
-
 - [ ] State reports inferred ringing.
-- [ ] SNOOZE click dismisses.
-- [ ] SNOOZE two-second hold snoozes.
-- [ ] MQTT/PWA dismiss and snooze work.
+- [ ] Physical SNOOZE while ringing turns the global gate OFF.
+- [ ] PWA dismiss holds Sharp OFF, programs the next entry, and restores the gate.
+- [ ] A long SNOOZE press performs no action.
 - [ ] Untouched inferred ringing clears after five minutes.
 - [ ] The following occurrence is programmed.
 
@@ -108,6 +112,7 @@ Record actual native snooze interval: __________
 - [ ] ESP restart restores alarms/timers.
 - [ ] Master OFF pauses timer remaining duration.
 - [ ] Total power loss waits for valid NTP.
+- [ ] Invalid time for 30 seconds enters manual fallback and valid NTP exits it.
 - [ ] Significant time correction triggers safe resync.
 - [ ] OTA rejects an incorrect password.
 

@@ -26,6 +26,7 @@ class SharpController {
   void setNativeAlarmEnabled(bool enabled);
   void cancel(const char* reason);
   bool busy() const { return job_ != Job::None; }
+  bool nativeAlarmEnabled() const { return nativeAlarmEnabled_; }
   Job job() const { return job_; }
   Phase phase() const { return phase_; }
   bool lastSucceeded() const { return lastSucceeded_; }

@@ -41,21 +41,24 @@ void NetworkService::startLocalServices() {
   MDNS.begin(Config::HOSTNAME);
   const char* headers[] = {"Authorization"};
   http_.collectHeaders(headers, 1);
-  http_.on("/api/v1/health", HTTP_GET, [this]() {
+  const auto sendState = [this]() {
     if (!authorized()) return sendJson(401, "{\"error\":\"unauthorized\"}");
     sendJson(200, stateProvider_ ? stateProvider_() : "{}");
-  });
-  http_.on("/api/v1/state", HTTP_GET, [this]() {
-    if (!authorized()) return sendJson(401, "{\"error\":\"unauthorized\"}");
-    sendJson(200, stateProvider_ ? stateProvider_() : "{}");
-  });
-  http_.on("/api/v1/command", HTTP_POST, [this]() {
+  };
+  const auto handleCommand = [this]() {
     if (!authorized()) return sendJson(401, "{\"error\":\"unauthorized\"}");
     String response;
     if (!commandHandler_ || !commandHandler_(http_.arg("plain"), response))
       return sendJson(400, response.length() ? response : "{\"error\":\"invalid command\"}");
     sendJson(200, response);
-  });
+  };
+  http_.on("/api/v2/health", HTTP_GET, sendState);
+  http_.on("/api/v2/state", HTTP_GET, sendState);
+  http_.on("/api/v2/command", HTTP_POST, handleCommand);
+  // Keep v1 aliases during the smart-mirror migration.
+  http_.on("/api/v1/health", HTTP_GET, sendState);
+  http_.on("/api/v1/state", HTTP_GET, sendState);
+  http_.on("/api/v1/command", HTTP_POST, handleCommand);
   http_.onNotFound([this]() { sendJson(404, "{\"error\":\"not found\"}"); });
   http_.begin();
 

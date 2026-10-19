@@ -7,6 +7,7 @@ struct PersistedData {
   uint32_t nextId = 1;
   Schedule::Alarm alarms[Config::MAX_ALARMS]{};
   Schedule::Timer timers[Config::MAX_TIMERS]{};
+  bool sharpAlarmGateEnabled = false;
 };
 
 class PersistentStore {

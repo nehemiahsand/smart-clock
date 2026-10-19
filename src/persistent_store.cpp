@@ -3,14 +3,24 @@
 
 namespace {
 constexpr uint32_t MAGIC = 0x53434c4b;
-constexpr uint16_t VERSION = 1;
-struct Blob {
+constexpr uint16_t VERSION = 2;
+
+struct PersistedDataV1 {
+  uint32_t nextId;
+  Schedule::Alarm alarms[Config::MAX_ALARMS];
+  Schedule::Timer timers[Config::MAX_TIMERS];
+};
+
+template <typename Data>
+struct StoredBlob {
   uint32_t magic;
   uint16_t version;
   uint16_t size;
-  PersistedData data;
+  Data data;
   uint32_t crc;
 };
+using Blob = StoredBlob<PersistedData>;
+using BlobV1 = StoredBlob<PersistedDataV1>;
 
 uint32_t crc32(const uint8_t* data, size_t length) {
   uint32_t crc = 0xffffffffUL;
@@ -37,31 +47,64 @@ bool PersistentStore::begin() {
 }
 
 bool PersistentStore::load(PersistedData& data) {
-  if (preferences_.getBytesLength("state") == 0) {
+  const size_t storedSize = preferences_.getBytesLength("state");
+  if (storedSize == 0) {
     data = PersistedData{};
     lastError_[0] = '\0';
     return true;
   }
-  if (preferences_.getBytesLength("state") != sizeof(Blob)) {
+
+  constexpr size_t MAX_BLOB_SIZE =
+      sizeof(Blob) > sizeof(BlobV1) ? sizeof(Blob) : sizeof(BlobV1);
+  if (storedSize > MAX_BLOB_SIZE) {
     setError(lastError_, "stored state size mismatch");
     data = PersistedData{};
     return false;
   }
-  Blob blob{};
-  if (preferences_.getBytes("state", &blob, sizeof(blob)) != sizeof(blob)) {
+  uint8_t raw[MAX_BLOB_SIZE]{};
+  if (preferences_.getBytes("state", raw, storedSize) != storedSize) {
     setError(lastError_, "stored state read failed");
     data = PersistedData{};
     return false;
   }
-  const uint32_t expected =
-      crc32(reinterpret_cast<const uint8_t*>(&blob), offsetof(Blob, crc));
-  if (blob.magic != MAGIC || blob.version != VERSION ||
-      blob.size != sizeof(PersistedData) || blob.crc != expected) {
-    setError(lastError_, "stored state validation failed");
+  uint16_t storedVersion = 0;
+  memcpy(&storedVersion, raw + offsetof(Blob, version), sizeof(storedVersion));
+
+  if (storedVersion == VERSION && storedSize == sizeof(Blob)) {
+    Blob blob{};
+    memcpy(&blob, raw, sizeof(blob));
+    const uint32_t expected =
+        crc32(reinterpret_cast<const uint8_t*>(&blob), offsetof(Blob, crc));
+    if (blob.magic != MAGIC || blob.version != VERSION ||
+        blob.size != sizeof(PersistedData) || blob.crc != expected) {
+      setError(lastError_, "stored state validation failed");
+      data = PersistedData{};
+      return false;
+    }
+    data = blob.data;
+  } else if (storedVersion == 1 && storedSize == sizeof(BlobV1)) {
+    BlobV1 blob{};
+    memcpy(&blob, raw, sizeof(blob));
+    const uint32_t expected =
+        crc32(reinterpret_cast<const uint8_t*>(&blob), offsetof(BlobV1, crc));
+    if (blob.magic != MAGIC || blob.version != 1 ||
+        blob.size != sizeof(PersistedDataV1) || blob.crc != expected) {
+      setError(lastError_, "stored v1 state validation failed");
+      data = PersistedData{};
+      return false;
+    }
+    data = PersistedData{};
+    data.nextId = blob.data.nextId;
+    memcpy(data.alarms, blob.data.alarms, sizeof(data.alarms));
+    memcpy(data.timers, blob.data.timers, sizeof(data.timers));
+    data.sharpAlarmGateEnabled = false;
+    if (!save(data)) return false;
+  } else {
+    setError(lastError_, "stored state size mismatch");
     data = PersistedData{};
     return false;
   }
-  data = blob.data;
+
   if (data.nextId == 0) data.nextId = 1;
   lastError_[0] = '\0';
   return true;

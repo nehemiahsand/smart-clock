@@ -10,10 +10,11 @@ The Smart Clock subsection must:
 - Show and control the smart master.
 - List/create/edit/enable/disable/delete up to ten alarms.
 - List/create/enable/disable/delete up to five timers.
-- Show scheduled, suspended, disabled, ringing, snoozed, and fired states.
+- Show scheduled, suspended, disabled, ringing, fired, and suppressed states.
 - Identify recurring, one-time, timer, and physical/manual origins.
 - Show the next native occurrence and label ringing as inferred.
-- Offer dismiss, five-minute snooze, and guarded sync/reset.
+- Show/control the Sharp alarm gate separately from the smart master.
+- Offer transient dismiss and guarded sync/reset; there is no snooze action.
 - Eventually show a physical-looking 3D clock with logical clickable controls.
 - Keep raw native-output tests in a separate diagnostics area.
 
@@ -107,8 +108,16 @@ Active alarm:
 
 ```json
 {"requestId":"...","action":"alarm.dismiss"}
-{"requestId":"...","action":"alarm.snooze"}
 ```
+
+Global Sharp alarm gate:
+
+```json
+{"requestId":"...","action":"sharp_alarm.set_enabled","enabled":false}
+```
+
+Enabling without any enabled alarm/timer returns `no_eligible_occurrence`.
+Creating, enabling, or materially editing an enabled alarm/timer arms the gate.
 
 Guarded operations require a UI confirmation:
 
@@ -120,14 +129,14 @@ Guarded operations require a UI confirmation:
 Logical 3D control:
 
 ```json
-{"requestId":"...","action":"button","button":"snooze","gesture":"hold"}
+{"requestId":"...","action":"button","button":"snooze","gesture":"click"}
 ```
 
 Logical mappings:
 
 - ON/OFF toggles smart master.
-- SNOOZE click dismisses; hold snoozes.
-- TIME/HOUR/MIN/ALARM issue native taps while idle.
+- SNOOZE click toggles the global Sharp alarm gate.
+- SNOOZE hold and ordinary TIME/HOUR/MIN/ALARM virtual taps are rejected.
 
 Diagnostic-only raw tap:
 
@@ -139,8 +148,10 @@ Diagnostic-only raw tap:
 
 Top-level fields:
 
-- `apiVersion`, `deviceId`
+- `apiVersion` (2), `deviceId`
 - `masterEnabled`
+- `sharpAlarmGateEnabled`, `sharpAlarmOutputEnabled`
+- `controlMode`: `smart` or `manual_fallback`
 - `timeValid`, `timeStatus`, `epoch`
 - `wifiConnected`, `mqttConnected`
 - `sharpBusy` and optional `lastSharpError`
@@ -163,11 +174,13 @@ Use retained state as the reconnect snapshot. Apply events for immediate feedbac
 
 ## HTTP diagnostics
 
-- `GET http://smart-clock.local/api/v1/health`
-- `GET http://smart-clock.local/api/v1/state`
-- `POST http://smart-clock.local/api/v1/command`
+- `GET http://smart-clock.local/api/v2/health`
+- `GET http://smart-clock.local/api/v2/state`
+- `POST http://smart-clock.local/api/v2/command`
 
-All require `Authorization: Bearer <HTTP_BEARER_TOKEN>`. POST uses the same JSON commands. HTTP is not encrypted; keep it on the trusted LAN and prefer MQTT TLS.
+All require `Authorization: Bearer <HTTP_BEARER_TOKEN>`. POST uses the same
+JSON commands. Legacy `/api/v1` aliases remain during migration. HTTP is not
+encrypted; keep it on the trusted LAN and prefer MQTT TLS.
 
 ## Backend changes
 
@@ -186,6 +199,8 @@ The current generic ESP32 service only consumes event/status topics. Add a dedic
 - Render times in `America/Chicago`.
 - Show weekday chips and physical/manual badges.
 - Show suspended entries and paused timer duration while master is off.
+- Treat `alarm.suppressed`, `timer.suppressed`, and
+  `sharp_alarm.gate_changed` as immediate events, then reconcile retained state.
 - Disable/reject controls while `sharpBusy` is true.
 - Keep disabled one-time alarms visible.
 - Do not expect custom text on the Sharp display.

@@ -103,6 +103,54 @@ void test_fall_alarm_has_one_selected_epoch() {
   TEST_ASSERT_EQUAL_INT64(0, nextAlarmEpoch(alarm, now));
 }
 
+void test_completion_preserves_recurring_and_suppresses_one_time() {
+  Alarm recurring{};
+  recurring.used = recurring.enabled = recurring.recurring = true;
+  completeAlarm(recurring, 1234, Completion::Suppressed);
+  TEST_ASSERT_TRUE(recurring.enabled);
+  TEST_ASSERT_EQUAL(EntryState::Scheduled, recurring.state);
+  TEST_ASSERT_EQUAL_INT64(1234, recurring.lastFiredEpoch);
+
+  Alarm oneTime{};
+  oneTime.used = oneTime.enabled = true;
+  completeAlarm(oneTime, 5678, Completion::Suppressed);
+  TEST_ASSERT_FALSE(oneTime.enabled);
+  TEST_ASSERT_EQUAL(EntryState::Suppressed, oneTime.state);
+
+  Timer timer{};
+  timer.used = timer.enabled = true;
+  completeTimer(timer, Completion::Suppressed);
+  TEST_ASSERT_FALSE(timer.enabled);
+  TEST_ASSERT_EQUAL(EntryState::Suppressed, timer.state);
+}
+
+void test_enabled_entry_detection_includes_suspended_entries() {
+  Alarm alarm{};
+  alarm.used = alarm.enabled = true;
+  alarm.state = EntryState::Suspended;
+  TEST_ASSERT_TRUE(hasEnabledEntries(&alarm, 1, nullptr, 0));
+  alarm.enabled = false;
+  TEST_ASSERT_FALSE(hasEnabledEntries(&alarm, 1, nullptr, 0));
+}
+
+void test_suppressed_occurrence_does_not_replay() {
+  const time_t now = localEpoch(2026, 1, 15, 10, 5);
+  Alarm alarm{};
+  alarm.used = alarm.enabled = alarm.recurring = true;
+  alarm.hour = 10;
+  alarm.minute = 0;
+  tm current{};
+  localtime_r(&now, &current);
+  alarm.weekdayMask = 1U << current.tm_wday;
+
+  const Occurrence due =
+      dueOccurrence(&alarm, 1, nullptr, 0, true, now, 300);
+  TEST_ASSERT_TRUE(due.valid);
+  completeAlarm(alarm, due.epoch, Completion::Suppressed);
+  TEST_ASSERT_FALSE(
+      dueOccurrence(&alarm, 1, nullptr, 0, true, now, 300).valid);
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_one_time_and_timer_selection);
@@ -111,5 +159,8 @@ int main(int, char**) {
   RUN_TEST(test_due_occurrence_honors_five_minute_grace);
   RUN_TEST(test_spring_nonexistent_time_is_skipped);
   RUN_TEST(test_fall_alarm_has_one_selected_epoch);
+  RUN_TEST(test_completion_preserves_recurring_and_suppresses_one_time);
+  RUN_TEST(test_enabled_entry_detection_includes_suspended_entries);
+  RUN_TEST(test_suppressed_occurrence_does_not_replay);
   return UNITY_END();
 }
