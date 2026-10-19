@@ -186,6 +186,11 @@ Software builds and host tests do not verify electrical behavior.
   reduced three legacy test entries to the newest entry, ID 3.
 - 2026-10-18: Final USB flash succeeded; live API v2 state showed valid NTP
   time, one physical alarm, gate/output enabled, and an idle Sharp controller.
+- 2026-10-18: Live 11:42 PM test passed end to end with the logical master OFF:
+  the physical alarm rang on schedule, SNOOZE disabled the Sharp gate/output,
+  ringing cleared, and the temporary manual entry deleted itself.
+- 2026-10-18: Replacement manual alarm saved as the sole physical entry for
+  6:28 AM October 19 with master OFF and Sharp gate/output enabled.
 - 2026-10-18: USB flash verified on ESP32 MAC `d4:e9:f4:e5:e6:0c`;
   API v2 boot and 30-second `manual_fallback` transition observed over serial.
 - Hardware behavior, MQTT TLS, HTTP, and OTA remain unverified on the actual devices.

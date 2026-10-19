@@ -93,7 +93,8 @@ Create near-future test entries.
 - [ ] Earlier entries replace later native programming incrementally.
 - [ ] Alarm/timer creation, edits, recurrence, suppression, and dismissal never blank the display or toggle the relay.
 - [ ] Master OFF suspends smart alarms/timers.
-- [ ] Physical manual alarm operates while master is OFF.
+- [x] Physical manual alarm operates while master is OFF.
+- [x] Temporary physical entry deletes itself after the alarm is dismissed.
 - [ ] Manual edit appears after the one-minute settling window.
 
 ## 8. Ringing
@@ -101,7 +102,7 @@ Create near-future test entries.
 Record actual untouched buzzer duration: __________
 
 - [ ] State reports inferred ringing.
-- [ ] Physical SNOOZE while ringing turns the global gate OFF.
+- [x] Physical SNOOZE while ringing turns the global gate OFF.
 - [ ] PWA dismiss holds Sharp OFF, programs the next entry, and restores the gate.
 - [ ] A long SNOOZE press performs no action.
 - [ ] Untouched inferred ringing clears after five minutes.
